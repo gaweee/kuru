@@ -1,125 +1,89 @@
-# kuru
+<h1 align="center">kuru</h1>
 
-A battery-powered, room-aware **rotary controller for Home Assistant**, running on the **Waveshare ESP32-S3-Knob-Touch-LCD-1.8**.
-Turn the knob to set a value, swipe or double-tap the glass for the next device, and the screen shows what you are asking for next
-to what the house has reported back.
+<p align="center"><b>A smart-home dial for Home Assistant.</b><br>
+Turn the knob to change something, swipe to pick what, and see at a glance whether the house has caught up.</p>
 
-Firmware in C on ESP-IDF 5.5 and LVGL 9, built with PlatformIO. The look is taken from a hand-built HTML prototype
-([`reference/knob-ui-prototype.html`](reference/knob-ui-prototype.html), open it in a browser) that is drawn only in colours a 16-bit panel can show.
+## What is it?
 
-## Status
+kuru is firmware for a rotary knob with a touchscreen on top, the **Waveshare ESP32-S3-Knob-Touch-LCD-1.8**. You turn the knob to set
+lights, aircon, a fan or curtains. The ring shows what you are asking for, and a thin line inside it shows what the house has
+reported back. When they meet, the room has caught up.
 
-| Works on the device | Still a stand-in |
-|---|---|
-| Four devices: **lights** (0-100 %), **aircon** (16-30 C with explicit on/off), **fan** (speeds 0-10, spinning icon), **curtains** (0 % open ... 100 % closed, animated pleats) | **Home Assistant**: a mock backend answers every command (the MQTT link is the next milestone) |
-| Encoder feel that speeds up on a fast spin and returns to fine steps when you slow down | Deep sleep and battery management (screen-off only) |
-| Requested / sent / reported state model, so a late or wrong answer never moves your dial | Haptics, long-press overview, room awareness |
-| Touch gestures, dim at 20 s, screen off at 30 s, wake by spin or double tap | |
-| Wake and reconnect sequence: last known state muted while it connects, scan animation, landing wave, "Changed from..." | |
-| **Real Wi-Fi** with credentials typed over USB, stored in flash | |
+It is made to live on a battery: the screen dims after 20 seconds, turns off after 30, and wakes when you spin the knob or
+double-tap the glass.
 
-## Hardware: which board
+## The four screens
 
-**Only the Waveshare ESP32-S3-Knob-Touch-LCD-1.8.** Pins, the display init table and the touch and encoder drivers are specific to it.
-Another ESP32-S3 board with a different display would need a new `components/board` and `components/input`; the controller, UI and
-network layers do not touch hardware. Facts about the board, and which of them are verified, are in [`docs/hardware.md`](docs/hardware.md).
+Each picture below also shows a different moment in the screen's life.
 
-Needed on the computer: Python 3, [PlatformIO](https://platformio.org/) (the `pio` command), a USB-C cable. No Node, no Arduino.
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/lights.png" width="260" alt="Lights at 80 percent, up to date"><br><b>Lights</b><br><i>Up to date</i>: fresh state has just arrived</td>
+    <td align="center"><img src="docs/images/aircon.png" width="260" alt="Aircon at 24.5 degrees, setting"><br><b>Aircon</b><br><i>Setting</i>: you turned it, the command is on its way</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/fan.png" width="260" alt="Fan at speed 2, connecting to Wi-Fi"><br><b>Fan</b><br><i>Connecting</i>: waking up, joining Wi-Fi, last state shown muted</td>
+    <td align="center"><img src="docs/images/curtains.png" width="260" alt="Curtains at 65 percent closed, syncing"><br><b>Curtains</b><br><i>Syncing</i>: asking Home Assistant what changed (0 % open ... 100 % closed)</td>
+  </tr>
+</table>
 
-## Build and flash
+Swipe left or right, or double-tap, to move between them. These pictures are renders of the design prototype, which the firmware follows.
+The prototype is a hand-built web page you can open in a browser:
+[`reference/knob-ui-prototype.html`](reference/knob-ui-prototype.html) (download the file and open it; turn with the arrow keys).
+
+## What it does well
+
+- **Feels like a real dial.** A slow turn moves one step per click; on the lights and curtains a fast spin speeds up to 3x, and it drops back to
+  fine steps the moment you slow down.
+- **Never lies about what the house is doing.** What you ask for, what was sent and what came back are tracked separately, so a late or
+  failed answer never yanks your dial backwards.
+- **Wakes up gracefully.** It shows the last thing it knew, muted, while it reconnects, then lights up when fresh state arrives, and
+  tells you what changed while it slept.
+- **Fast on a slow screen.** Full-screen redraws take about 100 ms, so almost everything on screen is a pre-drawn image.
+
+## What you need
+
+- The **Waveshare ESP32-S3-Knob-Touch-LCD-1.8**. kuru is written for this exact board; another board would need new display and input code
+  (see [`docs/hardware.md`](docs/hardware.md)).
+- A computer with Python 3 and [PlatformIO](https://platformio.org/), and a USB-C cable.
+
+## Try it
 
 ```sh
-python3 firmware/tools/gen_assets.py        # once: renders the image assets (about 10 s; they are not in git, ~60 MB of C)
+python3 firmware/tools/gen_assets.py     # once: draws the image assets (about 10 s)
 cd firmware
-pio run -e knob                             # build (the first one is slow: it compiles ESP-IDF and the ~60 MB of image C)
-pio run -e knob -t upload                   # flash
-pio device monitor                          # logs and the `kuru>` console
+pio run -e knob -t upload                # build and flash (the first build takes a while)
+pio device monitor                       # watch the logs and use the console
 ```
 
-**USB gotcha:** the USB-C plug orientation decides which of the board's two chips the cable reaches. If the board shows up as a
-`usbserial` port, or flashing says "This chip is ESP32, not ESP32-S3", **flip the plug**. If the S3 still does not appear, hold its BOOT
-button while plugging in. The `usbmodem` number changes after a reset, so pass `--upload-port` with the current one.
-
-### Wi-Fi
-
-Type the credentials into the console; they are stored in the board's flash and never in the source, a log or git.
+Then give it your Wi-Fi, by typing at the `kuru>` prompt in the monitor. It is saved on the board, never in the code:
 
 ```
-kuru> wifi set MyNetwork my-password        # quote names or passwords with spaces
-kuru> wifi status                           # connection, IP, access point and signal (never the password)
-kuru> wifi scan                             # access points in range, 2.4 GHz only
-kuru> wifi clear
+kuru> wifi set MyNetwork my-password
+kuru> wifi status
 ```
 
-More in [`firmware/README.md`](firmware/README.md). Credentials are stored unencrypted in the `nvs` partition: anyone holding the
-device can read them. Flash encryption is not set up.
+> **If the board will not flash or does not show up: flip the USB-C plug.** The board has two chips behind one port and the plug
+> orientation picks which one your computer sees. If it says "This chip is ESP32, not ESP32-S3", turn the plug over.
 
-## Repository
+## Where it is today
 
-```
-reference/    the UI prototype (HTML), the design source of truth
-firmware/     the ESP-IDF project: main/ and components/{board,input,controller,network,power,ui}
-              tools/gen_assets.py renders the ripple, tick, arc and icon images
-docs/         architecture.md (layers, state model, connection sequence), hardware.md
-tests/        host tests of the controller, link and power rules: sh tests/run.sh
-third_party/  licence texts of bundled material
-```
+| Works | Not yet |
+|---|---|
+| All four screens, the dial feel, touch gestures, sleep and wake | Talking to a real Home Assistant (a stand-in answers for now: MQTT is next) |
+| Joining Wi-Fi, the reconnect animation, queued commands | Haptics, battery and deep sleep, an all-devices overview |
 
-The layers are kept apart on purpose: `controller` (device state, encoder feel, connection state) is pure C with no LVGL, GPIO or
-network, and has the host tests; `ui` draws whatever device it is given; `network` delivers commands; `board` and `input` are the only
-hardware code. See [`docs/architecture.md`](docs/architecture.md).
+## Going deeper
 
-## What we learned
+- [`docs/architecture.md`](docs/architecture.md): how the code is organised and how a turn of the knob becomes a command
+- [`docs/lessons.md`](docs/lessons.md): what we learned (screen speed, build quirks, the USB trap, Wi-Fi); worth a read if you build something similar
+- [`docs/hardware.md`](docs/hardware.md): what we know about the board, and how sure we are
+- [`firmware/README.md`](firmware/README.md): build details and every `wifi` command
+- Tests run on your computer without the board: `sh tests/run.sh`
 
-**Hardware**
-- One USB-C port, two chips, chosen by the plug orientation (above). Most "the board dropped off USB" episodes were this.
-- The knob has two pulse contacts, not quadrature: a detent is one event on one contact. The feel (1 % per click, up to 3x on a fast
-  spin, falling back as soon as you slow down) is a smoothed click rate through a smoothstep, tuned by turning the real knob.
-- The radio is 2.4 GHz only. A network that is 5 GHz only never shows up in a scan.
+## Licence
 
-**Making LVGL fast on this panel** (all measured on the board)
-- The software renderer is CPU-bound. A full-screen redraw cost 300 ms at 24 bit and is about 100 ms at 16 bit with flat colours
-  (the design was redrawn for 16 bit: no gradients, so nothing to band).
-- Each image draw costs about 0.85 ms whatever its size or format, so the work is in drawing fewer images: ripples, ticks, arc
-  wedges and the curtain pleats are **pre-rendered** (`gen_assets.py`) instead of drawn with LVGL primitives.
-- LVGL redraws on **any** style or position write, even with an unchanged value: every setter is guarded.
-- A widget that is resized or moved invalidates its old and new area. Animating two curtain panels as image objects cost a full redraw
-  per frame; drawing one image through a custom draw callback and invalidating only the strip between the old and new edge costs a few ms.
-- An `lv_line` is sized from the origin to its furthest point. With screen coordinates a 12 px check mark owned a 50,000 pixel object
-  and every pulse frame redrew it (about 50 ms). Use local coordinates and hide what is not showing.
-- Dirty-area overflow (more than 32 areas) falls back to a full redraw: `LV_INV_BUF_SIZE=128`. LVGL's own memory pool was 4x faster
-  than the system malloc. Two draw threads were slower; larger S3 caches caused a boot loop.
-- While the knob turns, only cheap things change; the arc, the tick gradient and the ripples settle one after another afterwards.
-
-**Build and configuration**
-- PlatformIO keeps one `sdkconfig.<env>` per environment: a change in `sdkconfig.defaults` only applies to symbols not already in it.
-- The generated asset C is large. `gen_assets.py` leaves unchanged files alone so rebuilds stay incremental; a change to `sdkconfig`
-  or the component set rebuilds all of it (about 7 minutes here).
-- PlatformIO checks the image against the board definition's 8 MB, not `partitions.csv`: `board_upload.maximum_size` has to match.
-- Typing into the console needs the primary console on USB Serial/JTAG; as a secondary console it is output only.
-
-**Wi-Fi and the house**
-- "Join the strongest access point" is best effort: the quick scan at connect time sometimes misses one. The ESP32 does not roam, so
-  to tell which floor it is on, scan and compare the signal of every known BSSID instead of trusting the connected one.
-- Home Assistant counts a cover's position the other way (100 = open). The curtains here count how *closed* they are, so the future
-  adapter must map `value = 100 - position`.
-- The UI is deliberately snappier than the prototype's animations; the real hardware (a curtain motor) keeps its own pace and the screen
-  only reflects it through the status word and the "At N %" line.
-
-## Tests
-
-`sh tests/run.sh` builds and runs the host tests (pure C, no board): encoder feel, the aircon, fan and curtain rules, the connection
-state machine and mock network, the Wi-Fi credential rules, and screen power. `pio run -e knob_tour` builds a scripted tour that
-reports frame times per phase over the serial port.
-
-## Licence and third-party material
-
-kuru is released under the **MIT License** ([`LICENSE`](LICENSE)). Material it builds on keeps its own licence:
-
-- The UI font is **Outfit**, SIL Open Font License 1.1, copyright 2021 The Outfit Project Authors; its glyphs are compiled into
-  `firmware/components/ui/fonts/`. Licence text: [`third_party/Outfit-OFL.txt`](third_party/Outfit-OFL.txt).
-- Dependencies are fetched by the build: [LVGL](https://lvgl.io/) (MIT), [ESP-IDF](https://github.com/espressif/esp-idf) and the Espressif
-  components `esp_lvgl_port` and `esp_lcd_sh8601` (Apache-2.0, see each package's licence).
-- `firmware/components/board/lcd_init_cmds.h` (the display's register init table) was taken from an unofficial mirror of Waveshare's
-  demo code. Its provenance and licence have not been checked against Waveshare's own release; do that before publishing.
-- Not affiliated with or endorsed by Waveshare, Espressif or Home Assistant.
+[MIT](LICENSE). The Outfit font is under the SIL Open Font License ([`third_party/Outfit-OFL.txt`](third_party/Outfit-OFL.txt)); LVGL (MIT)
+and ESP-IDF (Apache-2.0) are downloaded by the build. The display's start-up register table came from an unofficial copy of Waveshare's
+demo code and its licence has not been checked, so verify it against Waveshare's download before you redistribute.
+kuru is not affiliated with Waveshare, Espressif or Home Assistant.

@@ -378,6 +378,7 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
       <p>Waveshare’s parts list shows the encoder, a power button and a BOOT button, but no push switch on the knob. Press therefore maps to a tap on the glass, which sits in the middle of the knob anyway.</p>
       <p>Haptics run through the onboard DRV2605. The effect numbers under the knob are suggestions from its ROM library; confirm them on the real motor. If the encoder has physical clicks, match one software step to each click.</p>
       <p>Everything is flat arcs, lines, circles and text, which LVGL draws cheaply and which can’t band. Dim with the backlight PWM rather than by drawing darker colours. Subset the numeral font to digits and a few symbols.</p>
+      <p>Curtains show how closed they are: 0% is fully open, 100% is fully closed, and the ring fills as they close. Home Assistant’s cover position runs the other way (0 is closed), so the knob sends 100 minus the value and flips incoming state the same way.</p>
       <p>Keep the last known state in RAM through light sleep so the first frame needs no network. Keeping Wi-Fi associated during light sleep makes waking mostly a state fetch; switching it off saves battery but adds association and DHCP time, which a static IP and a saved channel help shorten. The timings in this mockup are rough placeholders, so measure them on the board.</p>
       <p>The scan and the wave only recolour a handful of ticks per frame, so LVGL redraws small regions and the animation stays smooth over QSPI.</p>
     </section>
@@ -431,7 +432,7 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   // ---------- devices ----------
   const devices = [
     { id: 'fan', name: 'Fan', entity: 'fan.living_room', accent: '#B4D48F', min: 0, max: 6, step: 1, current: 2, target: 2, minLabel: 'Off', maxLabel: '6' },
-    { id: 'curtains', name: 'Curtains', entity: 'cover.living_room_curtains', accent: '#F3AF8F', min: 0, max: 100, step: 5, current: 35, target: 35, minLabel: 'Closed', maxLabel: 'Open' },
+    { id: 'curtains', name: 'Curtains', entity: 'cover.living_room_curtains', accent: '#F3AF8F', min: 0, max: 100, step: 5, current: 65, target: 65, minLabel: 'Open', maxLabel: 'Closed' },
     { id: 'lights', name: 'Lights', entity: 'light.living_room', accent: '#FFC766', min: 0, max: 100, step: 5, current: 60, target: 60, minLabel: 'Off', maxLabel: '100%' },
     { id: 'aircon', name: 'Aircon', entity: 'climate.living_room', accent: '#8FD9D2', min: 16, max: 30, step: .5, current: 24, target: 24, on: true, tOn: true, lastSet: 24, room: 27.4, minLabel: '16°', maxLabel: '30°' },
   ];
@@ -550,24 +551,24 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     if (d.id === 'aircon') return d.on ? fmt(d.current) + '°' : 'off';
     if (d.id === 'fan') return d.current ? 'speed ' + d.current : 'off';
     if (d.id === 'lights') return d.current ? d.current + '%' : 'off';
-    const c = Math.round(d.current); return c <= 0 ? 'closed' : c + '%';
+    const c = Math.round(d.current); return c <= 0 ? 'open' : c >= 100 ? 'closed' : c + '%';
   }
   function ovText(d) {
     if (d.id === 'aircon') return d.on ? fmt(d.current) + '°' : 'Off';
     if (d.id === 'fan') return d.current ? 'Speed ' + d.current : 'Off';
     if (d.id === 'lights') return d.current ? d.current + '%' : 'Off';
-    const c = Math.round(d.current); return c <= 0 ? 'Closed' : c + '%';
+    const c = Math.round(d.current); return c <= 0 ? 'Open' : c >= 100 ? 'Closed' : c + '%';
   }
   function context(d) {
     if (d.id === 'aircon') return d.tOn ? `Room ${d.room.toFixed(1)}°` : `Turn to resume ${fmt(d.lastSet)}°`;
     if (d.id === 'fan') return d.target ? 'Speed' : 'Turn to start';
     if (d.id === 'lights') return d.target ? 'Brightness' : 'Turn to switch on';
-    return d.target <= 0 ? 'Closed' : d.target >= 100 ? 'Fully open' : 'Open';
+    return d.target <= 0 ? 'Fully open' : d.target >= 100 ? 'Fully closed' : 'Closed';
   }
   function serviceCall(d) {
     switch (d.id) {
       case 'fan': return d.target ? { service: 'fan.set_percentage', data: `percentage: ${Math.round(d.target / 6 * 100)}` } : { service: 'fan.turn_off', data: '' };
-      case 'curtains': return { service: 'cover.set_cover_position', data: `position: ${d.target}` };
+      case 'curtains': return { service: 'cover.set_cover_position', data: `position: ${100 - d.target}` };   // HA: 0 = closed, so send the inverse
       case 'lights': return d.target ? { service: 'light.turn_on', data: `brightness_pct: ${d.target}` } : { service: 'light.turn_off', data: '' };
       default:
         if (!d.tOn) return { service: 'climate.set_hvac_mode', data: 'hvac_mode: off' };
@@ -621,7 +622,7 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     else if (net === 'noha') s = ['err', 'Offline'];
     else if (!live) s = null;
     else if (d.phase === 'sending') s = ['pip', 'Setting'];
-    else if (d.phase === 'moving') s = ['pip', d.moveTo > d.current ? 'Opening' : 'Closing'];
+    else if (d.phase === 'moving') s = ['pip', d.moveTo > d.current ? 'Closing' : 'Opening'];
     else if (d.phase === 'done') s = ['ok', 'Set'];
     else if (d.phase === 'error') s = ['err', 'Not set'];
     else if (t < upToDateUntil) s = ['ok', 'Up to date'];
@@ -704,7 +705,7 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     curtainG.setAttribute('opacity', curtO.toFixed(3));
     curtainG.style.visibility = curtO < 0.004 ? 'hidden' : 'visible';
     if (d.id === 'curtains') {
-      const w = 128 * (1 - 0.8 * a);
+      const w = 128 * (0.2 + 0.8 * a);   // more closed = wider panels
       cL.setAttribute('width', w.toFixed(2));
       cR.setAttribute('x', (308 - w).toFixed(2)); cR.setAttribute('width', w.toFixed(2));
     }
@@ -740,7 +741,7 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   function shake() {
     if (!reduce) slide.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-7px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }], { duration: 380 });
   }
-  function announce(d) { live.textContent = `${d.name}: ${d.moving ? 'moving to ' + d.moveTo + '%' : ovText(d)}`; }
+  function announce(d) { live.textContent = `${d.name}: ${d.moving ? (d.moveTo > d.current ? 'closing' : 'opening') + ' to ' + d.moveTo + '%' : ovText(d)}`; }
 
   // ---------- log ----------
   const clock = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
