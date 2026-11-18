@@ -1,0 +1,28 @@
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# LVGL
+# 16-bit: the design (reference/knob-ui-prototype.html) is flat colours chosen from the RGB565 palette. 24-bit made LVGL's blits
+# 2-3x slower and was only needed to hide gradient banding, which the flat design no longer has.
+CONFIG_LV_COLOR_DEPTH_16=y
+CONFIG_LV_USE_DRAW_SW_COMPLEX_GRADIENTS=y
+CONFIG_LV_USE_LABEL=y
+CONFIG_LV_USE_ARC=y
+CONFIG_LV_USE_LINE=y
+CONFIG_LV_FONT_DEFAULT_MONTSERRAT_14=y
+CONFIG_LV_DEF_REFR_PERIOD=16
+# Render speed: -Og is the IDF default; LVGL's software renderer is CPU-bound on this board.
+# (Larger S3 cache sizes were tried and put the board in a boot loop; do not re-add without testing.)
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+# LVGL uses its own pool allocator: the system malloc measured 8 us per alloc+free (vs ~0.3 us), which made redraws
+# several times slower. The default 64 KB pool ran out (48 ticks + 270 arc segments + labels), so it is sized up (the UI uses ~57 KB; measured with `knob_perf`).
+CONFIG_LV_USE_BUILTIN_MALLOC=y
+CONFIG_LV_MEM_SIZE=114688
+# The USB console: the REPL (components/network/kuru_console.c, e.g. `wifi set <network> <password>`) needs the primary
+# console on USB Serial/JTAG, the same cable that flashes the board. (As a secondary console it is output only.)
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
