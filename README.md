@@ -114,7 +114,7 @@ reports frame times per phase over the serial port.
 
 ## Licence and third-party material
 
-**No licence has been chosen for this code yet**: until a `LICENSE` file is added, all rights are reserved.
+kuru is released under the **MIT License** ([`LICENSE`](LICENSE)). Material it builds on keeps its own licence:
 
 - The UI font is **Outfit**, SIL Open Font License 1.1, copyright 2021 The Outfit Project Authors; its glyphs are compiled into
   `firmware/components/ui/fonts/`. Licence text: [`third_party/Outfit-OFL.txt`](third_party/Outfit-OFL.txt).
